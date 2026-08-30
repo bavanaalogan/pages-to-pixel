@@ -42,18 +42,35 @@ const Flipbook = forwardRef(({ pages, onPageChange, zoom }, ref) => {
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
-  // Initialize StPageFlip
   useEffect(() => {
-    if (!containerRef.current || pages.length === 0) return
+    if (!wrapperRef.current) return
 
-    // Destroy previous instance if exists
+    wrapperRef.current.style.width = `${dimensions.width}px`
+    wrapperRef.current.style.height = `${dimensions.height}px`
+
+    if (flipBookRef.current) {
+      flipBookRef.current.update()
+    }
+  }, [dimensions])
+
+  // Initialize StPageFlip once per page set and recreate the root safely when needed
+  useEffect(() => {
+    if (!wrapperRef.current || pages.length === 0) return
+
+    const previousRoot = containerRef.current
     if (flipBookRef.current) {
       flipBookRef.current.destroy()
       flipBookRef.current = null
     }
 
-    // Clear container
-    containerRef.current.innerHTML = ''
+    const nextRoot = document.createElement('div')
+    nextRoot.className = 'flipbook-container'
+    wrapperRef.current.replaceChildren(nextRoot)
+    containerRef.current = nextRoot
+
+    if (previousRoot && previousRoot !== nextRoot) {
+      previousRoot.remove()
+    }
 
     // Create page elements
     pages.forEach((src, index) => {
@@ -75,11 +92,11 @@ const Flipbook = forwardRef(({ pages, onPageChange, zoom }, ref) => {
       img.style.userSelect = 'none'
 
       pageDiv.appendChild(img)
-      containerRef.current.appendChild(pageDiv)
+      nextRoot.appendChild(pageDiv)
     })
 
     // Initialize PageFlip
-    const pageFlip = new PageFlip(containerRef.current, {
+    const pageFlip = new PageFlip(nextRoot, {
       width: dimensions.width,
       height: dimensions.height,
       size: 'fixed',
@@ -102,10 +119,8 @@ const Flipbook = forwardRef(({ pages, onPageChange, zoom }, ref) => {
       mobileScrollSupport: false,
     })
 
-    // Load pages from the DOM elements
-    pageFlip.loadFromHTML(containerRef.current.querySelectorAll('.page'))
+    pageFlip.loadFromHTML(nextRoot.querySelectorAll('.page'))
 
-    // Single flip event handler using ref to avoid stale closures
     pageFlip.on('flip', (e) => {
       if (onPageChangeRef.current) {
         onPageChangeRef.current(e.data)
@@ -113,14 +128,16 @@ const Flipbook = forwardRef(({ pages, onPageChange, zoom }, ref) => {
     })
 
     flipBookRef.current = pageFlip
+  }, [pages, dimensions.width, dimensions.height])
 
+  useEffect(() => {
     return () => {
       if (flipBookRef.current) {
         flipBookRef.current.destroy()
         flipBookRef.current = null
       }
     }
-  }, [pages, dimensions])
+  }, [])
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
